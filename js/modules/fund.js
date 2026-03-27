@@ -3,8 +3,9 @@
 // 从本地存储加载基金数据
 function loadFromLocalStorage() {
     const savedFunds = DataManager.getAllFunds();
-    // 数据迁移：确保所有基金都有正确的数值类型
+    // 数据迁移：确保所有基金都有正确的数值类型和id
     funds = savedFunds.map(f => ({
+        id: f.id || generateId(),
         ...f,
         costNav: safeNumber(f.costNav),
         shares: safeNumber(f.shares),
@@ -13,8 +14,21 @@ function loadFromLocalStorage() {
         sellNav: safeNumber(f.sellNav),
         sellShares: safeNumber(f.sellShares)
     }));
-    originalFunds = [...funds];
+    // 保存更新后的数据（确保所有基金都有id）
+    if (funds.length > 0) {
+        originalFunds = [...funds];
+        saveToLocalStorage();
+    } else {
+        originalFunds = [];
+    }
 }
+
+// 基金分页状态
+let fundPaginationState = {
+    currentPage: 1,
+    pageSize: 10,
+    totalItems: 0
+};
 
 // 保存基金数据到本地存储
 function saveToLocalStorage() {
@@ -24,7 +38,11 @@ function saveToLocalStorage() {
 // 渲染基金表格
 function renderTable(filteredFunds = null) {
     const tableBody = document.getElementById('fundTableBody');
+    const paginationContainer = document.getElementById('fundPagination');
     const displayFunds = filteredFunds || funds;
+    
+    // 更新分页状态
+    fundPaginationState.totalItems = displayFunds.length;
     
     if (displayFunds.length === 0) {
         tableBody.innerHTML = `
@@ -35,11 +53,20 @@ function renderTable(filteredFunds = null) {
                 </td>
             </tr>
         `;
+        if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
         return;
     }
     
+    // 计算分页数据
+    const totalPages = Math.ceil(fundPaginationState.totalItems / fundPaginationState.pageSize);
+    const startIndex = (fundPaginationState.currentPage - 1) * fundPaginationState.pageSize;
+    const endIndex = startIndex + fundPaginationState.pageSize;
+    const paginatedFunds = displayFunds.slice(startIndex, endIndex);
+    
     let html = '';
-    displayFunds.forEach((fund, index) => {
+    paginatedFunds.forEach((fund, index) => {
         const returnAmount = calculateReturn(fund);
         const returnRate = calculateReturnRate(fund);
         
@@ -69,8 +96,8 @@ function renderTable(filteredFunds = null) {
                 </td>
                 <td>
                     <div class="action-btns">
-                        <button class="icon-btn edit-btn" onclick="editFund(${index})"><i class="fas fa-edit"></i></button>
-                        <button class="icon-btn delete-btn" onclick="deleteFund(${index})"><i class="fas fa-trash"></i></button>
+                        <button class="icon-btn edit-btn" onclick="editFundById('${fund.id}')" title="编辑"><i class="fas fa-edit"></i></button>
+                        <button class="icon-btn delete-btn" onclick="deleteFundById('${fund.id}')" title="删除"><i class="fas fa-trash"></i></button>
                     </div>
                 </td>
             </tr>
@@ -78,6 +105,80 @@ function renderTable(filteredFunds = null) {
     });
     
     tableBody.innerHTML = html;
+    
+    // 渲染分页控件
+    if (paginationContainer) {
+        renderFundPagination(totalPages);
+    }
+}
+
+// 渲染基金分页控件
+function renderFundPagination(totalPages) {
+    const paginationContainer = document.getElementById('fundPagination');
+    if (!paginationContainer) return;
+    
+    let paginationHtml = `
+        <div class="pagination-controls">
+            <div class="pagination-info">
+                共 ${fundPaginationState.totalItems} 条记录，每页显示 ${fundPaginationState.pageSize} 条
+            </div>
+            <div class="pagination-buttons">
+                <button class="pagination-btn" onclick="changeFundPage(${Math.max(1, fundPaginationState.currentPage - 1)})" ${fundPaginationState.currentPage === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+    `;
+    
+    // 生成页码按钮
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, fundPaginationState.currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage + 1 < maxVisiblePages) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `
+            <button class="pagination-btn ${i === fundPaginationState.currentPage ? 'active' : ''}" onclick="changeFundPage(${i})">
+                ${i}
+            </button>
+        `;
+    }
+    
+    paginationHtml += `
+                <button class="pagination-btn" onclick="changeFundPage(${Math.min(totalPages, fundPaginationState.currentPage + 1)})" ${fundPaginationState.currentPage === totalPages ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="pagination-size">
+                <label>每页显示：</label>
+                <select onchange="changeFundPageSize(this.value)">
+                    <option value="5" ${fundPaginationState.pageSize === 5 ? 'selected' : ''}>5</option>
+                    <option value="10" ${fundPaginationState.pageSize === 10 ? 'selected' : ''}>10</option>
+                    <option value="20" ${fundPaginationState.pageSize === 20 ? 'selected' : ''}>20</option>
+                    <option value="50" ${fundPaginationState.pageSize === 50 ? 'selected' : ''}>50</option>
+                </select>
+            </div>
+        </div>
+    `;
+    
+    paginationContainer.innerHTML = paginationHtml;
+}
+
+// 切换基金页码
+function changeFundPage(page) {
+    if (page < 1 || page > Math.ceil(fundPaginationState.totalItems / fundPaginationState.pageSize)) {
+        return;
+    }
+    fundPaginationState.currentPage = page;
+    renderTable();
+}
+
+// 切换基金每页显示数量
+function changeFundPageSize(size) {
+    fundPaginationState.pageSize = parseInt(size);
+    fundPaginationState.currentPage = 1;
+    renderTable();
 }
 
 // 计算收益
@@ -150,11 +251,15 @@ function closeModal() {
     document.getElementById('fundModal').classList.remove('active');
 }
 
-// 编辑基金
-function editFund(index) {
-    const fund = funds[index];
+// 编辑基金（按ID）
+function editFundById(id) {
+    const fund = funds.find(f => f.id === id);
+    if (!fund) {
+        showToast('基金不存在');
+        return;
+    }
     document.getElementById('modalTitle').textContent = '编辑基金';
-    document.getElementById('editIndex').value = index;
+    document.getElementById('editIndex').value = funds.findIndex(f => f.id === id);
     document.getElementById('fundName').value = fund.name;
     document.getElementById('fundCode').value = fund.code;
     document.getElementById('fundTypeSelect').value = fund.type || '混合型';
@@ -171,11 +276,28 @@ function editFund(index) {
     document.getElementById('fundModal').classList.add('active');
 }
 
-// 删除基金
-function deleteFund(index) {
+// 编辑基金（兼容旧版本）
+function editFund(index) {
+    if (typeof index === 'number') {
+        const fund = funds[index];
+        if (!fund) {
+            showToast('基金不存在');
+            return;
+        }
+        editFundById(fund.id);
+    }
+}
+
+// 删除基金（按ID）
+function deleteFundById(id) {
     if (confirm('确定要删除这个基金吗？')) {
-        const fundToDelete = funds[index];
-        funds.splice(index, 1);
+        const fundIndex = funds.findIndex(f => f.id === id);
+        if (fundIndex === -1) {
+            showToast('基金不存在');
+            return;
+        }
+        const fundToDelete = funds[fundIndex];
+        funds.splice(fundIndex, 1);
         // 同时从 originalFunds 中删除
         const originalIndex = originalFunds.findIndex(f => f.id === fundToDelete.id);
         if (originalIndex !== -1) {
@@ -185,6 +307,18 @@ function deleteFund(index) {
         renderTable();
         updateStats();
         showToast('基金删除成功');
+    }
+}
+
+// 删除基金（兼容旧版本）
+function deleteFund(index) {
+    if (typeof index === 'number') {
+        const fund = funds[index];
+        if (!fund) {
+            showToast('基金不存在');
+            return;
+        }
+        deleteFundById(fund.id);
     }
 }
 

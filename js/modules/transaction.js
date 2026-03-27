@@ -21,6 +21,13 @@ let transactionSortState = {
     direction: 'desc'
 };
 
+// 交易分页状态
+let transactionPaginationState = {
+    currentPage: 1,
+    pageSize: 10,
+    totalItems: 0
+};
+
 // 渲染交易页面（卡片视图）
 function renderTransactionCardView(transactions = null) {
     const transactionList = document.getElementById('transactionCardView');
@@ -100,7 +107,11 @@ function renderTransactionCardView(transactions = null) {
 // 渲染交易表格视图
 function renderTransactionTableView(transactions = null) {
     const tableBody = document.getElementById('transactionTableBody');
+    const paginationContainer = document.getElementById('transactionPagination');
     const displayTransactions = transactions || loadTransactions();
+    
+    // 更新分页状态
+    transactionPaginationState.totalItems = displayTransactions.length;
     
     if (displayTransactions.length === 0) {
         tableBody.innerHTML = `
@@ -111,11 +122,21 @@ function renderTransactionTableView(transactions = null) {
                 </td>
             </tr>
         `;
+        if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
         return;
     }
     
+    // 计算分页数据
+    const totalPages = Math.ceil(transactionPaginationState.totalItems / transactionPaginationState.pageSize);
+    const startIndex = (transactionPaginationState.currentPage - 1) * transactionPaginationState.pageSize;
+    const endIndex = startIndex + transactionPaginationState.pageSize;
+    const paginatedTransactions = displayTransactions.slice(startIndex, endIndex);
+    
+    // 渲染表格数据
     let html = '';
-    displayTransactions.forEach(transaction => {
+    paginatedTransactions.forEach(transaction => {
         const date = new Date(transaction.datetime);
         const formattedDate = date.toLocaleString('zh-CN', {
             year: 'numeric',
@@ -153,6 +174,80 @@ function renderTransactionTableView(transactions = null) {
     });
     
     tableBody.innerHTML = html;
+    
+    // 渲染分页控件
+    if (paginationContainer) {
+        renderPagination(totalPages);
+    }
+}
+
+// 渲染分页控件
+function renderPagination(totalPages) {
+    const paginationContainer = document.getElementById('transactionPagination');
+    if (!paginationContainer) return;
+    
+    let paginationHtml = `
+        <div class="pagination-controls">
+            <div class="pagination-info">
+                共 ${transactionPaginationState.totalItems} 条记录，每页显示 ${transactionPaginationState.pageSize} 条
+            </div>
+            <div class="pagination-buttons">
+                <button class="pagination-btn" onclick="changePage(${Math.max(1, transactionPaginationState.currentPage - 1)})" ${transactionPaginationState.currentPage === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+    `;
+    
+    // 生成页码按钮
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, transactionPaginationState.currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage + 1 < maxVisiblePages) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `
+            <button class="pagination-btn ${i === transactionPaginationState.currentPage ? 'active' : ''}" onclick="changePage(${i})">
+                ${i}
+            </button>
+        `;
+    }
+    
+    paginationHtml += `
+                <button class="pagination-btn" onclick="changePage(${Math.min(totalPages, transactionPaginationState.currentPage + 1)})" ${transactionPaginationState.currentPage === totalPages ? 'disabled' : ''}>
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="pagination-size">
+                <label>每页显示：</label>
+                <select onchange="changePageSize(this.value)">
+                    <option value="5" ${transactionPaginationState.pageSize === 5 ? 'selected' : ''}>5</option>
+                    <option value="10" ${transactionPaginationState.pageSize === 10 ? 'selected' : ''}>10</option>
+                    <option value="20" ${transactionPaginationState.pageSize === 20 ? 'selected' : ''}>20</option>
+                    <option value="50" ${transactionPaginationState.pageSize === 50 ? 'selected' : ''}>50</option>
+                </select>
+            </div>
+        </div>
+    `;
+    
+    paginationContainer.innerHTML = paginationHtml;
+}
+
+// 切换页码
+function changePage(page) {
+    if (page < 1 || page > Math.ceil(transactionPaginationState.totalItems / transactionPaginationState.pageSize)) {
+        return;
+    }
+    transactionPaginationState.currentPage = page;
+    renderTransactionTableView();
+}
+
+// 切换每页显示数量
+function changePageSize(size) {
+    transactionPaginationState.pageSize = parseInt(size);
+    transactionPaginationState.currentPage = 1;
+    renderTransactionTableView();
 }
 
 // 渲染交易页面
