@@ -984,7 +984,7 @@ function deleteAsset(id) {
         let index = assets.findIndex(a => String(a.id) === String(id));
         if (index !== -1) {
             assets.splice(index, 1);
-            saveAssets();
+            DataManager.deleteAsset(id);
             renderAssetPage();
             showToast('资产删除成功');
             return;
@@ -994,7 +994,7 @@ function deleteAsset(id) {
         index = goldAssets.findIndex(g => String(g.id) === String(id));
         if (index !== -1) {
             goldAssets.splice(index, 1);
-            saveGoldAssets();
+            DataManager.deleteGoldAsset(id);
             renderAssetPage();
             showToast('黄金资产删除成功');
         }

@@ -157,6 +157,8 @@ function switchAssetView(view) {
     // 重新渲染
     if (view === 'account') {
         renderAccountView();
+    } else if (view === 'type') {
+        renderAssetCards();
     }
 }
 

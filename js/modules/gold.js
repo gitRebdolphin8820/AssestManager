@@ -85,7 +85,7 @@ function editGold(id) {
 function deleteGold(id) {
     if (confirm('确定要删除这项黄金资产吗？')) {
         goldAssets = goldAssets.filter(g => String(g.id) !== String(id));
-        saveGoldAssets();
+        DataManager.deleteGoldAsset(id);
         renderAssetPage();
         showToast('删除成功');
     }
