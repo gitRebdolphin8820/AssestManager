@@ -13,20 +13,19 @@ async function fetchApi(endpoint, options = {}) {
     });
     
     if (!response.ok) {
-      throw new Error(`API请求失败: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`API请求失败: ${response.status} - ${errorText}`);
     }
     
-    return await response.json();
+    // 检查响应是否为空
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return await response.json();
+    }
+    return await response.text();
   } catch (error) {
     console.error('API请求错误:', error);
-    // 失败时返回默认值
-    // 对于获取数据的请求，返回空数组
-    const method = options.method || 'GET';
-    // 确保GET请求返回空数组
-    if (method === 'GET' || endpoint.includes('get') || !options.method) {
-      return [];
-    }
-    return null;
+    throw error;
   }
 }
 
@@ -215,6 +214,46 @@ export async function saveSettings(settings) {
 // 基金净值更新
 export async function updateFundNav(code) {
   return await fetchApi(`/fund/nav?code=${code}`);
+}
+
+// 基金分组管理
+export async function getAllFundGroups() {
+  return await fetchApi('/fund-groups');
+}
+
+export async function saveFundGroup(group, isUpdate = false) {
+  console.log('saveFundGroup called:', { group, isUpdate });
+  if (isUpdate && group.id) {
+    // 更新现有分组
+    return await fetchApi(`/fund-groups/${group.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(group)
+    });
+  } else {
+    // 创建新分组
+    const newGroup = {
+      ...group,
+      id: group.id || generateId()
+    };
+    console.log('Creating new group:', newGroup);
+    return await fetchApi('/fund-groups', {
+      method: 'POST',
+      body: JSON.stringify(newGroup)
+    });
+  }
+}
+
+export async function deleteFundGroup(groupId) {
+  return await fetchApi(`/fund-groups/${groupId}`, {
+    method: 'DELETE'
+  });
+}
+
+export async function updateFundGroup(fundId, groupId) {
+  return await fetchApi(`/funds/${fundId}/group`, {
+    method: 'PUT',
+    body: JSON.stringify({ groupId })
+  });
 }
 
 // 执行交易

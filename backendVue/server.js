@@ -18,7 +18,7 @@ const pool = new Pool({
     user: 'postgres',           // 数据库用户名
     host: 'localhost',          // 数据库主机地址
     database: 'asset_manager',  // 数据库名称
-    password: '123456',         // 数据库密码
+    password: '123789',         // 数据库密码
     port: 5432,                 // 数据库端口
 });
 
@@ -165,6 +165,28 @@ async function checkAndCreateTables() {
             console.log('funds 表 remark 字段检查完成');
         } catch (err) {
             console.log('funds 表 remark 字段已存在或无需添加');
+        }
+
+        // 6.2 创建基金分组表
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS fund_groups (
+                id VARCHAR(50) PRIMARY KEY,              -- 分组ID
+                name VARCHAR(100) NOT NULL,              -- 分组名称
+                color VARCHAR(20) DEFAULT '#667eea',     -- 分组颜色
+                sort_order INTEGER DEFAULT 0,            -- 排序顺序
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 6.3 检查并添加 funds 表的 group_id 字段（兼容旧表）
+        try {
+            await client.query(`
+                ALTER TABLE funds ADD COLUMN IF NOT EXISTS group_id VARCHAR(50) REFERENCES fund_groups(id)
+            `);
+            console.log('funds 表 group_id 字段检查完成');
+        } catch (err) {
+            console.log('funds 表 group_id 字段已存在或无需添加');
         }
 
         // 7. 创建设置表
@@ -554,6 +576,79 @@ app.delete('/api/funds/:id', async (req, res) => {
     }
 });
 
+// 5. 更新基金分组
+app.put('/api/funds/:id/group', async (req, res) => {
+    const { id } = req.params;
+    const { groupId } = req.body;
+    try {
+        const result = await pool.query(
+            'UPDATE funds SET group_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+            [groupId || null, id]
+        );
+        res.json(snakeToCamel(result.rows[0]));
+    } catch (err) {
+        console.error('更新基金分组错误:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 基金分组管理API
+// 1. 获取所有分组
+app.get('/api/fund-groups', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM fund_groups ORDER BY sort_order, created_at');
+        res.json(snakeToCamel(result.rows));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. 创建分组
+app.post('/api/fund-groups', async (req, res) => {
+    const { id, name, color, sortOrder } = req.body;
+    console.log('创建分组请求:', { id, name, color, sortOrder });
+    try {
+        const result = await pool.query(
+            'INSERT INTO fund_groups (id, name, color, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
+            [id, name, color || '#667eea', sortOrder || 0]
+        );
+        console.log('分组创建成功:', result.rows[0]);
+        res.json(snakeToCamel(result.rows[0]));
+    } catch (err) {
+        console.error('创建分组失败:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. 更新分组
+app.put('/api/fund-groups/:id', async (req, res) => {
+    const { id } = req.params;
+    const { name, color, sortOrder } = req.body;
+    try {
+        const result = await pool.query(
+            'UPDATE fund_groups SET name = $1, color = $2, sort_order = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING *',
+            [name, color, sortOrder, id]
+        );
+        res.json(snakeToCamel(result.rows[0]));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 4. 删除分组
+app.delete('/api/fund-groups/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        // 先将该分组下的基金设为未分组
+        await pool.query('UPDATE funds SET group_id = NULL WHERE group_id = $1', [id]);
+        // 删除分组
+        await pool.query('DELETE FROM fund_groups WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 设置管理API
 // 1. 获取设置（如果没有设置，会自动创建默认设置）
 app.get('/api/settings', async (req, res) => {
@@ -663,6 +758,11 @@ app.get('/api/fund/nav', async (req, res) => {
         console.error('获取基金净值错误:', err);
         res.status(500).json({ status: 'error', error: err.message });
     }
+});
+
+// 健康检查端点
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // 启动服务

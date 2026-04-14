@@ -30,10 +30,33 @@
         <i class="fas fa-file-export"></i> 导出Excel
       </button>
       
+      <button class="btn btn-info" @click="openGroupModal">
+        <i class="fas fa-folder"></i> 管理分组
+      </button>
+      
       <span class="sync-status">
         <span class="sync-dot"></span>
         自动同步准备就绪
       </span>
+    </div>
+    
+    <!-- 视图切换 -->
+    <div class="view-toggle">
+      <span class="view-label">视图模式：</span>
+      <button 
+        class="view-btn" 
+        :class="{ active: viewMode === 'table' }"
+        @click="viewMode = 'table'"
+      >
+        <i class="fas fa-table"></i> 表格视图
+      </button>
+      <button 
+        class="view-btn" 
+        :class="{ active: viewMode === 'group' }"
+        @click="viewMode = 'group'"
+      >
+        <i class="fas fa-folder-open"></i> 分组视图
+      </button>
     </div>
     
     <!-- 筛选器 -->
@@ -72,7 +95,7 @@
     </div>
     
     <!-- 基金表格 -->
-    <div style="overflow-x: auto;">
+    <div v-if="viewMode === 'table'" style="overflow-x: auto;">
       <table id="fundTable">
         <thead>
           <tr>
@@ -180,7 +203,7 @@
     </div>
     
     <!-- 分页控件 -->
-    <div class="pagination-controls" v-if="displayFunds.length > 0">
+    <div class="pagination-controls" v-if="displayFunds.length > 0 && viewMode === 'table'">
       <div class="pagination-info">
         共 {{ funds.length }} 条记录，当前第 {{ currentPage }} 页，共 {{ pageCount }} 页
       </div>
@@ -198,12 +221,75 @@
       </div>
     </div>
     
+    <!-- 分组视图 -->
+    <div v-if="viewMode === 'group'" class="group-view">
+      <div v-for="group in groupedFunds" :key="group.id" class="fund-group">
+        <div class="group-header" @click="toggleGroup(group.id)">
+          <div class="group-title">
+            <span class="group-color" :style="{ backgroundColor: group.color }"></span>
+            <span class="group-name">{{ group.name }}</span>
+            <span class="group-count">({{ group.funds.length }}只)</span>
+          </div>
+          <div class="group-stats">
+            <span class="group-cost">成本: ¥{{ formatCurrency(group.totalCost) }}</span>
+            <span class="group-value">市值: ¥{{ formatCurrency(group.totalValue) }}</span>
+            <span :class="['group-return', group.totalReturn >= 0 ? 'return-positive' : 'return-negative']">
+              收益: {{ group.totalReturn >= 0 ? '+' : '' }}¥{{ formatCurrency(group.totalReturn) }}
+            </span>
+            <i class="fas" :class="group.collapsed ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
+          </div>
+        </div>
+        <div v-show="!group.collapsed" class="group-content">
+          <table class="group-table">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>成本金额</th>
+                <th>当前市值</th>
+                <th>收益</th>
+                <th>收益率</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="fund in group.funds" :key="fund.id">
+                <td>
+                  <div class="fund-name">{{ fund.name }}</div>
+                  <div class="fund-code">{{ fund.code }}</div>
+                </td>
+                <td>¥{{ safeNumber(fund.costAmount).toFixed(2) }}</td>
+                <td>¥{{ (safeNumber(fund.currentNav) * (safeNumber(fund.shares) - safeNumber(fund.sellShares))).toFixed(2) }}</td>
+                <td :class="calculateReturn(fund) >= 0 ? 'return-positive' : 'return-negative'">
+                  {{ calculateReturn(fund) >= 0 ? '+' : '' }}¥{{ Math.abs(calculateReturn(fund)).toFixed(2) }}
+                </td>
+                <td :class="calculateReturnRate(fund) >= 0 ? 'return-positive' : 'return-negative'">
+                  {{ calculateReturnRate(fund) >= 0 ? '+' : '' }}{{ Math.abs(calculateReturnRate(fund)).toFixed(2) }}%
+                </td>
+                <td>
+                  <div class="action-btns">
+                    <select class="group-select" @change="moveFundToGroup(fund.id, $event.target.value)">
+                      <option value="">移动到...</option>
+                      <option v-for="g in fundGroups" :key="g.id" :value="g.id" :selected="fund.groupId === g.id">
+                        {{ g.name }}
+                      </option>
+                      <option value="">未分组</option>
+                    </select>
+                    <button class="icon-btn edit-btn" @click="editFundById(fund.id)" title="编辑"><i class="fas fa-edit"></i></button>
+                    <button class="icon-btn delete-btn" @click="deleteFundById(fund.id)" title="删除"><i class="fas fa-trash"></i></button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    
     <!-- 基金模态框 -->
     <div class="modal" id="fundModal" :class="{ active: fundModalVisible }" @click.self="closeModal">
       <div class="modal-content">
         <div class="modal-header">
           <h3 class="modal-title"><i class="fas fa-chart-line"></i> {{ isEditing ? '编辑基金' : '新增基金' }}</h3>
-          <span class="close" @click="closeModal">&times;</span>
         </div>
         
         <div class="modal-body">
@@ -389,6 +475,57 @@
       </div>
     </div>
     
+    <!-- 分组管理模态框 -->
+    <div class="modal" id="groupModal" :class="{ active: groupModalVisible }" @click.self="closeGroupModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title"><i class="fas fa-folder"></i> 管理分组</h3>
+        </div>
+        
+        <div class="modal-body">
+          <!-- 分组列表 -->
+          <div class="group-list">
+            <div v-for="group in fundGroups" :key="group.id" class="group-item">
+              <div class="group-item-info">
+                <input type="color" v-model="group.color" class="group-color-picker" @change="updateGroup(group)">
+                <span class="group-item-name">{{ group.name }}</span>
+              </div>
+              <div class="group-item-actions">
+                <button class="icon-btn edit-btn" @click="editGroup(group)" title="编辑"><i class="fas fa-edit"></i></button>
+                <button class="icon-btn delete-btn" @click="deleteGroupById(group.id)" title="删除"><i class="fas fa-trash"></i></button>
+              </div>
+            </div>
+            <div v-if="fundGroups.length === 0" class="empty-groups">
+              暂无分组，请添加新分组
+            </div>
+          </div>
+          
+          <!-- 添加/编辑分组表单 -->
+          <div class="group-form">
+            <h4>{{ isEditingGroup ? '编辑分组' : '添加分组' }}</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>分组名称</label>
+                <input type="text" v-model="groupForm.name" placeholder="输入分组名称">
+              </div>
+              <div class="form-group">
+                <label>分组颜色</label>
+                <input type="color" v-model="groupForm.color">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary" @click="resetGroupForm">重置</button>
+              <button class="btn btn-primary" @click="saveGroup">{{ isEditingGroup ? '保存' : '添加' }}</button>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="closeGroupModal">关闭</button>
+        </div>
+      </div>
+    </div>
+    
     <!-- Toast 通知 -->
     <div id="toast" class="toast"></div>
   </div>
@@ -404,19 +541,37 @@ import {
   deleteFund as deleteFundFromService,
   generateId,
   getAllAssets,
-  saveAsset as saveAssetFromService
+  saveAsset as saveAssetFromService,
+  getAllFundGroups,
+  saveFundGroup,
+  deleteFundGroup,
+  updateFundGroup
 } from '../services/dataService';
 
 // 基金数据
 const funds = ref([]);
 const originalFunds = ref([]);
 const assets = ref([]);
+const fundGroups = ref([]);
 
 // 模态框状态
 const fundModalVisible = ref(false);
 const importModalVisible = ref(false);
+const groupModalVisible = ref(false);
 const isEditing = ref(false);
+const isEditingGroup = ref(false);
 const editIndex = ref(-1);
+
+// 分组表单
+const groupForm = ref({
+  id: '',
+  name: '',
+  color: '#667eea',
+  sortOrder: 0
+});
+
+// 视图模式
+const viewMode = ref('table'); // 'table' | 'group'
 
 // 表单数据
 const fundForm = ref({
@@ -513,6 +668,59 @@ const previewData = computed(() => {
   return pendingImportData.value.slice(0, 5);
 });
 
+// 分组折叠状态
+const groupCollapseState = ref({});
+
+// 切换分组折叠状态
+function toggleGroup(groupId) {
+  groupCollapseState.value[groupId] = !groupCollapseState.value[groupId];
+}
+
+// 分组视图数据
+const groupedFunds = computed(() => {
+  const groups = [];
+  
+  // 先添加有分组的数据
+  fundGroups.value.forEach(group => {
+    const groupFunds = funds.value.filter(f => f.groupId === group.id);
+    const totalCost = groupFunds.reduce((sum, f) => sum + safeNumber(f.costAmount), 0);
+    const totalValue = groupFunds.reduce((sum, f) => {
+      return sum + safeNumber(f.currentNav) * (safeNumber(f.shares) - safeNumber(f.sellShares));
+    }, 0);
+    
+    groups.push({
+      ...group,
+      funds: groupFunds,
+      totalCost,
+      totalValue,
+      totalReturn: totalValue - totalCost,
+      collapsed: groupCollapseState.value[group.id] || false
+    });
+  });
+  
+  // 添加未分组的数据
+  const ungroupedFunds = funds.value.filter(f => !f.groupId);
+  if (ungroupedFunds.length > 0) {
+    const totalCost = ungroupedFunds.reduce((sum, f) => sum + safeNumber(f.costAmount), 0);
+    const totalValue = ungroupedFunds.reduce((sum, f) => {
+      return sum + safeNumber(f.currentNav) * (safeNumber(f.shares) - safeNumber(f.sellShares));
+    }, 0);
+    
+    groups.push({
+      id: 'ungrouped',
+      name: '未分组',
+      color: '#a0aec0',
+      funds: ungroupedFunds,
+      totalCost,
+      totalValue,
+      totalReturn: totalValue - totalCost,
+      collapsed: groupCollapseState.value['ungrouped'] || false
+    });
+  }
+  
+  return groups;
+});
+
 // 方法
 async function loadData() {
   console.log('开始加载基金数据');
@@ -522,12 +730,15 @@ async function loadData() {
     originalFunds.value = [...funds.value];
     assets.value = await getAllAssets();
     console.log('加载资产数据成功:', assets.value.length);
+    fundGroups.value = await getAllFundGroups();
+    console.log('加载分组数据成功:', fundGroups.value.length);
   } catch (error) {
     console.error('加载数据失败:', error);
     // 即使加载失败，也要确保数据为数组，避免后续操作出错
     funds.value = [];
     originalFunds.value = [];
     assets.value = [];
+    fundGroups.value = [];
   }
 }
 
@@ -929,6 +1140,99 @@ function changePage(page) {
 function changePageSize(size) {
   pageSize.value = parseInt(size);
   currentPage.value = 1;
+}
+
+// 分组管理方法
+function openGroupModal() {
+  groupModalVisible.value = true;
+  resetGroupForm();
+}
+
+function closeGroupModal() {
+  groupModalVisible.value = false;
+  resetGroupForm();
+}
+
+function resetGroupForm() {
+  isEditingGroup.value = false;
+  groupForm.value = {
+    id: '',
+    name: '',
+    color: '#667eea',
+    sortOrder: 0
+  };
+}
+
+function editGroup(group) {
+  isEditingGroup.value = true;
+  groupForm.value = { ...group };
+}
+
+async function saveGroup() {
+  if (!groupForm.value.name.trim()) {
+    showToast('请输入分组名称', 'error');
+    return;
+  }
+  
+  try {
+    console.log('保存分组:', { isEditing: isEditingGroup.value, form: groupForm.value });
+    
+    await saveFundGroup({
+      id: groupForm.value.id,
+      name: groupForm.value.name.trim(),
+      color: groupForm.value.color,
+      sortOrder: groupForm.value.sortOrder
+    }, isEditingGroup.value);
+    
+    showToast(isEditingGroup.value ? '分组更新成功' : '分组创建成功');
+    await loadData();
+    
+    // 如果是新增模式，关闭弹窗；如果是编辑模式，保持打开继续编辑
+    if (!isEditingGroup.value) {
+      closeGroupModal();
+    } else {
+      resetGroupForm();
+    }
+  } catch (error) {
+    console.error('保存分组失败:', error);
+    showToast('保存分组失败: ' + (error.message || '未知错误'), 'error');
+  }
+}
+
+async function updateGroup(group) {
+  try {
+    await saveFundGroup(group);
+    showToast('分组颜色已更新');
+  } catch (error) {
+    console.error('更新分组失败:', error);
+    showToast('更新分组失败', 'error');
+  }
+}
+
+async function deleteGroupById(groupId) {
+  if (!confirm('确定要删除这个分组吗？该分组下的基金将变为未分组状态。')) {
+    return;
+  }
+  
+  try {
+    await deleteFundGroup(groupId);
+    showToast('分组删除成功');
+    await loadData();
+  } catch (error) {
+    console.error('删除分组失败:', error);
+    showToast('删除分组失败', 'error');
+  }
+}
+
+async function moveFundToGroup(fundId, groupId) {
+  try {
+    await updateFundGroup(fundId, groupId || null);
+    showToast('基金分组已更新');
+    await loadData();
+  } catch (error) {
+    console.error('移动基金分组失败:', error);
+    showToast('移动基金分组失败', 'error');
+  }
 }
 
 // 初始化
@@ -1634,5 +1938,251 @@ input:focus, select:focus, textarea:focus {
   .toast.show {
     transform: translateY(0);
   }
+}
+/* 视图切换 */
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 15px 20px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.view-label {
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.view-btn {
+  padding: 8px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #4a5568;
+}
+
+.view-btn:hover {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.view-btn.active {
+  background: #667eea;
+  border-color: #667eea;
+  color: white;
+}
+
+/* 分组视图 */
+.group-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fund-group {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+  cursor: pointer;
+  transition: all 0.3s;
+  border-left: 4px solid transparent;
+}
+
+.group-header:hover {
+  background: linear-gradient(135deg, #edf2f7 0%, #e2e8f0 100%);
+}
+
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.group-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.group-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.group-count {
+  font-size: 13px;
+  color: #718096;
+  background: #e2e8f0;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.group-stats {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 13px;
+  color: #4a5568;
+}
+
+.group-cost, .group-value {
+  font-weight: 500;
+}
+
+.group-return {
+  font-weight: 600;
+}
+
+.group-content {
+  padding: 16px 20px;
+}
+
+.group-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.group-table th {
+  text-align: left;
+  padding: 10px;
+  font-size: 12px;
+  color: #718096;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.group-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #edf2f7;
+  font-size: 14px;
+}
+
+.group-select {
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  background: white;
+}
+
+.group-select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+/* 分组管理弹窗 */
+.group-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+.group-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #f7fafc;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.group-item-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.group-color-picker {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.group-item-name {
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.group-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.empty-groups {
+  text-align: center;
+  padding: 40px;
+  color: #a0aec0;
+  font-size: 14px;
+}
+
+.group-form {
+  background: #f7fafc;
+  padding: 20px;
+  border-radius: 10px;
+  margin-top: 20px;
+}
+
+.group-form h4 {
+  margin: 0 0 16px 0;
+  color: #2d3748;
+  font-size: 16px;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-row .form-group {
+  flex: 1;
+}
+
+.form-row input[type="text"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.form-row input[type="color"] {
+  width: 60px;
+  height: 40px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
 }
 </style>

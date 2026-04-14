@@ -1326,6 +1326,25 @@ async function saveAsset() {
   // 处理黄金资产
   if (asset.subType === 'gold') {
     asset.value = asset.grams * currentGoldPrice.value;
+    
+    // 新增模式：处理扣款
+    if (!isEditingAsset.value && asset.paymentSource) {
+      const costAmount = asset.value;
+      const account = accounts.value.find(acc => acc.id === asset.paymentSource);
+      
+      if (account) {
+        if (account.balance < costAmount) {
+          alert(`账户余额不足！当前余额: ${formatCurrency(account.balance)}, 需要: ${formatCurrency(costAmount)}`);
+          return;
+        }
+        
+        // 扣除账户余额
+        account.balance -= costAmount;
+        await saveAccountFromService(account, true);
+        console.log(`已从账户 ${account.name} 扣除 ${formatCurrency(costAmount)}`);
+      }
+    }
+    
     await saveGoldAssetFromService(asset, isEditingAsset.value);
   } else {
     await saveAssetFromService(asset, isEditingAsset.value);

@@ -782,9 +782,74 @@ textarea {
     transition: width 0.3s ease;
 }
 
-/* 负债卡片特殊样式 */
+/* 负债卡片样式 */
 .debt-card {
-    border-left-color: #f56565;
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid #f56565;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.debt-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.debt-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.debt-type {
+    font-size: 12px;
+    color: #fff;
+    background: linear-gradient(135deg, #f56565, #e53e3e);
+    padding: 4px 10px;
+    border-radius: 12px;
+}
+
+.debt-amount {
+    font-size: 24px;
+    font-weight: 700;
+    color: #c53030;
+}
+
+.debt-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.debt-detail-item {
+    font-size: 13px;
+    color: #718096;
+    background: #fef2f2;
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+
+.debt-detail-item .detail-label {
+    color: #9b2c2c;
+    margin-right: 4px;
+}
+
+.debt-detail-item .detail-value {
+    color: #c53030;
+    font-weight: 600;
+}
+
+.debt-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid #fed7d7;
 }
 
 .debt-card .asset-card-title {
