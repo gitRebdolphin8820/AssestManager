@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人资产管理系统 2.0 - 资产联动版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.5.0/dist/axios.min.js"></script>
+    <!-- 引入 Font Awesome 图标 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部导航 -->
+        <div class="nav-header">
+            <div class="system-title">
+                <i class="fas fa-wallet"></i> 个人资产管理系统
+            </div>
+            <div class="nav-tabs">
+                <button class="nav-tab active" onclick="switchTab('transaction', event)">
+                    <i class="fas fa-exchange-alt"></i> 交易管理
+                </button>
+                <button class="nav-tab" onclick="switchTab('asset', event)">
+                    <i class="fas fa-gem"></i> 资产负债
+                </button>
+                <button class="nav-tab" onclick="switchTab('fund', event)">
+                    <i class="fas fa-chart-bar"></i> 基金情况
+                </button>
+            </div>
+        </div>
+
+        <!-- 页面1: 交易管理 -->
+        <div id="transactionPage" class="page-content active">
+            <h1 class="page-title">交易管理</h1>
+            <p class="page-subtitle">管理所有资金交易，掌握资金流向</p>
+            
+            <div class="transaction-summary">
+                <div class="transaction-card income">
+                    <div class="stat-label">本月收入</div>
+                    <div class="stat-amount" id="monthlyIncome">¥0.00</div>
+                </div>
+                <div class="transaction-card expense">
+                    <div class="stat-label">本月支出</div>
+                    <div class="stat-amount" id="monthlyExpense">¥0.00</div>
+                </div>
+                <div class="transaction-card balance">
+                    <div class="stat-label">本月结余</div>
+                    <div class="stat-amount" id="monthlyNet">¥0.00</div>
+                </div>
+                <div class="transaction-card income">
+                    <div class="stat-label">本年收入</div>
+                    <div class="stat-amount" id="yearlyIncome">¥0.00</div>
+                </div>
+                <div class="transaction-card expense">
+                    <div class="stat-label">本年支出</div>
+                    <div class="stat-amount" id="yearlyExpense">¥0.00</div>
+                </div>
+                <div class="transaction-card balance">
+                    <div class="stat-label">本年结余</div>
+                    <div class="stat-amount" id="yearlyNet">¥0.00</div>
+                </div>
+            </div>
+            
+            <div class="transaction-controls">
+                <button class="btn btn-success" onclick="openIncomeModal()">
+                    <i class="fas fa-arrow-down"></i> 添加收入
+                </button>
+                <button class="btn btn-danger" onclick="openExpenseModal()">
+                    <i class="fas fa-arrow-up"></i> 添加支出
+                </button>
+                <div class="view-toggle">
+                    <button class="view-toggle-btn active" id="viewCardBtn" onclick="switchTransactionView('card')">
+                        <i class="fas fa-th-large"></i> 卡片视图
+                    </button>
+                    <button class="view-toggle-btn" id="viewTableBtn" onclick="switchTransactionView('table')">
+                        <i class="fas fa-table"></i> 表格视图
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 表格视图筛选器 -->
+            <div id="tableFilter" class="filter-container" style="display: none;">
+                <div class="date-filter">
+                    <label class="filter-label">开始日期：</label>
+                    <input type="date" id="transactionStartDate">
+                    <label class="filter-label">结束日期：</label>
+                    <input type="date" id="transactionEndDate">
+                    <button class="btn btn-secondary" onclick="filterTransactions()">
+                        <i class="fas fa-filter"></i> 筛选
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetTransactionFilter()">
+                        <i class="fas fa-sync-alt"></i> 重置
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 卡片视图 -->
+            <div id="transactionCardView" class="transaction-list">
+                <!-- 交易记录将通过 JavaScript 动态填充 -->
+            </div>
+            
+            <!-- 表格视图 -->
+            <div id="transactionTableView" style="display: none; overflow-x: auto;">
+                <table id="transactionTable">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTransactions('datetime')">
+                                日期时间
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTransactions('type')">
+                                类型
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTransactions('category')">
+                                分类
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTransactions('amount')">
+                                金额
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTransactions('description')">
+                                描述
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionTableBody">
+                        <tr>
+                            <td colspan="6" class="empty-state">
+                                <div class="empty-icon"><i class="fas fa-exchange-alt"></i></div>
+                                <div>暂无交易记录</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <!-- 分页控件 -->
+                <div id="transactionPagination" class="transaction-pagination"></div>
+            </div>
+        </div>
+        
+        <!-- 页面3: 资产负债情况 -->
+        <div id="assetPage" class="page-content">
+            <h1 class="page-title">资产负债总览</h1>
+            <p class="page-subtitle">全方位掌握您的资产配置与负债情况，科学规划财务</p>
+            
+            <!-- 资产负债对比 -->
+            <div class="balance-section">
+                <div class="balance-header">
+                    <div class="balance-title"><i class="fas fa-chart-pie"></i> 资产负债概览</div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span class="gold-price-display">
+                            <i class="fas fa-coins"></i> 当前金价: <span class="price" id="goldPriceDisplay">¥1000.00/克</span>
+                        </span>
+                        <span id="debtRatioBadge" class="badge" style="background: #c6f6d5; color: #22543d;">资产负债率: 0%</span>
+                    </div>
+                </div>
+                <div class="balance-grid">
+                    <div class="balance-item">
+                        <div class="balance-item-label"><i class="fas fa-coins"></i> 总资产</div>
+                        <div class="balance-item-value assets" id="totalAssetsDisplay">¥0.00</div>
+                    </div>
+                    <div class="balance-item">
+                        <div class="balance-item-label"><i class="fas fa-credit-card"></i> 总负债</div>
+                        <div class="balance-item-value debts" id="totalDebtsDisplay">¥0.00</div>
+                    </div>
+                    <div class="balance-item">
+                        <div class="balance-item-label"><i class="fas fa-gem"></i> 净资产</div>
+                        <div class="balance-item-value net" id="netWorthDisplay">¥0.00</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 资产统计卡片 -->
+            <div class="stats-cards">
+                <div class="stat-card net-worth-card">
+                    <div class="stat-label"><i class="fas fa-gem"></i> 净资产</div>
+                    <div class="stat-value" id="netWorth">¥0.00</div>
+                    <div class="stat-change">资产 - 负债</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label"><i class="fas fa-coins"></i> 总资产</div>
+                    <div class="stat-value" id="totalAssets">¥0.00</div>
+                    <div class="stat-change" id="assetTrend">净资产统计</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);">
+                    <div class="stat-label"><i class="fas fa-university"></i> 银行存款</div>
+                    <div class="stat-value" id="bankAssets">¥0.00</div>
+                    <div class="stat-change">流动性资产</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #7d85af 0%, #8087ca 100%);">
+                    <div class="stat-label"><i class="fas fa-chart-line"></i> 基金投资</div>
+                    <div class="stat-value" id="fundAssets">¥0.00</div>
+                    <div class="stat-change" id="fundReturn">收益计算中...</div>
+                </div>
+            </div>
+
+            <!-- 负债统计卡片 -->
+            <div class="stats-cards">
+                <div class="stat-card" style="background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);">
+                    <div class="stat-label"><i class="fas fa-credit-card"></i> 总负债</div>
+                    <div class="stat-value" id="totalDebtAmount">¥0.00</div>
+                    <div class="stat-change" id="debtTrend">需偿还债务</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #9f7aea 0%, #805ad5 100%);">
+                    <div class="stat-label"><i class="fas fa-home"></i> 房贷</div>
+                    <div class="stat-value" id="mortgageDebt">¥0.00</div>
+                    <div class="stat-change">长期负债</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);">
+                    <div class="stat-label"><i class="fas fa-car"></i> 车贷</div>
+                    <div class="stat-value" id="carDebt">¥0.00</div>
+                    <div class="stat-change">车辆贷款</div>
+                </div>
+                <div class="stat-card" style="background: linear-gradient(135deg, #ecc94b 0%, #d69e2e 100%);">
+                    <div class="stat-label"><i class="fas fa-credit-card"></i> 信用卡/其他</div>
+                    <div class="stat-value" id="otherDebt">¥0.00</div>
+                    <div class="stat-change">短期负债</div>
+                </div>
+            </div>
+
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <canvas id="assetChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="debtChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 视图切换工具栏 -->
+            <div class="toolbar" style="justify-content: space-between; align-items: center;">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button class="btn btn-primary" onclick="openAccountModal()">
+                        <i class="fas fa-university"></i> 创建账户
+                    </button>
+                    <button class="btn btn-success" onclick="openAssetModal()">
+                        <i class="fas fa-plus"></i> 新增资产
+                    </button>
+                    <button class="btn btn-warning" onclick="openDebtModal()">
+                        <i class="fas fa-plus"></i> 新增负债
+                    </button>
+                </div>
+                
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <span style="color: #718096; font-size: 14px;">展示方式：</span>
+                    <div class="view-toggle">
+                        <button class="view-toggle-btn active" id="viewByTypeBtn" onclick="switchAssetView('type')">
+                            <i class="fas fa-layer-group"></i> 按资产类型
+                        </button>
+                        <button class="view-toggle-btn" id="viewByAccountBtn" onclick="switchAssetView('account')">
+                            <i class="fas fa-university"></i> 按账户
+                        </button>
+                    </div>
+                    <button class="btn btn-primary" onclick="refreshAssetData()">
+                        <i class="fas fa-sync-alt"></i> 刷新
+                    </button>
+                </div>
+            </div>
+
+            <!-- 按资产类型视图 -->
+            <div id="assetViewByType" class="asset-view">
+                <div class="asset-grid" id="assetList">
+                    <!-- 动态生成资产卡片 -->
+                </div>
+            </div>
+
+            <!-- 按账户视图 -->
+            <div id="assetViewByAccount" class="asset-view" style="display: none;">
+                <div id="accountList">
+                    <!-- 动态生成账户卡片 -->
+                </div>
+            </div>
+            
+            <h2 style="margin-top: 30px; margin-bottom: 20px; color: #2d3748; font-size: 20px;"><i class="fas fa-list"></i> 负债明细</h2>
+            <div class="asset-grid" id="debtList">
+                <!-- 动态生成负债卡片 -->
+            </div>
+        </div>
+
+        <!-- 页面3: 基金情况 -->
+        <div id="fundPage" class="page-content">
+            <h1 class="page-title">基金管理系统</h1>
+            <p class="page-subtitle">智能管理您的基金投资组合</p>
+                   
+            <div class="toolbar">
+                <div class="file-input-wrapper">
+                    <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">
+                        <i class="fas fa-file-import"></i> 导入Excel
+                    </button>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFileSelect(event)">
+                </div>
+                
+                <button class="btn btn-success" onclick="openModal()">
+                    <i class="fas fa-plus"></i> 新增基金
+                </button>
+                
+                <button class="btn btn-primary" onclick="updateAllNetValues()">
+                    <i class="fas fa-sync-alt"></i> 更新净值
+                </button>
+                
+                <button class="btn btn-secondary" onclick="exportExcel()">
+                    <i class="fas fa-file-export"></i> 导出Excel
+                </button>
+                
+                <span class="sync-status">
+                    <span class="sync-dot"></span>
+                    自动同步准备就绪
+                </span>
+            </div>
+            
+            <!-- 筛选器 -->
+            <div class="filter-container">
+                <span class="filter-label">定投筛选：</span>
+                <select id="fixedFilter" class="filter-select" onchange="applyFilters()">
+                    <option value="all">全部</option>
+                    <option value="fixed">定投</option>
+                    <option value="non-fixed">非定投</option>
+                </select>
+            </div>
+            
+            <div class="stats-cards" id="statsCards">
+                <div class="stat-card">
+                    <div class="stat-label">总成本</div>
+                    <div class="stat-value" id="totalCost">¥0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">当前市值</div>
+                    <div class="stat-value" id="totalValue">¥0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">累计收益</div>
+                    <div class="stat-value" id="totalReturn">¥0.00</div>
+                    <div class="stat-change" id="returnRate">0.00%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">持有基金数</div>
+                    <div class="stat-value" id="fundCount">0</div>
+                </div>
+            </div>
+            
+            <div style="overflow-x: auto;">
+                <table id="fundTable">
+                    <thead>
+                        <tr>
+                            <th>名称</th>
+                            <th>定投</th>
+                            <th>基金类型</th>
+                            <th onclick="sortTable('costNav')">
+                                成本净值
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTable('shares')">
+                                持有份额
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTable('costAmount')">
+                                成本金额
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTable('currentNav')">
+                                当前净值
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTable('sellNav')">
+                                卖出净值
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTable('sellShares')">
+                                卖出份额
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTable('returnAmount')">
+                                收益
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th onclick="sortTable('returnRate')">
+                                收益率
+                                <span class="sort-indicator">
+                                    <span class="up">▲</span>
+                                    <span class="down">▼</span>
+                                </span>
+                            </th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fundTableBody">
+                        <tr>
+                            <td colspan="13" class="empty-state">
+                                <div class="empty-icon"><i class="fas fa-chart-bar"></i></div>
+                                <div>暂无基金数据，请导入Excel或手动添加</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <!-- 分页控件 -->
+                <div id="fundPagination" class="transaction-pagination"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 流水记录模态框 -->
+    <div class="modal" id="flowModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="flowModalTitle">记一笔</h3>
+                <p style="color: #718096; font-size: 13px;">记录您的收支情况</p>
+            </div>
+            
+            <form id="flowForm">
+                <input type="hidden" id="flowEditIndex" value="-1">
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>日期 *</label>
+                        <input type="date" id="flowDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>类型 *</label>
+                        <select id="flowType" required onchange="updateFlowCategories()">
+                            <option value="income">收入</option>
+                            <option value="expense">支出</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>分类 *</label>
+                        <select id="flowCategory" required>
+                            <!-- 动态填充 -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>金额 *</label>
+                        <input type="number" id="flowAmount" step="0.01" required placeholder="0.00">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>账户 *</label>
+                        <select id="flowAccount" required onchange="updateFlowAssetSelect(this.value)">
+                            <option value="">-- 选择账户 --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>资产 *</label>
+                        <select id="flowAsset" required>
+                            <option value="">-- 选择资产 --</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>备注</label>
+                    <textarea id="flowRemark" placeholder="可选填，如：工资收入、餐饮消费等"></textarea>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeFlowModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 资产录入模态框 -->
+    <div class="modal" id="assetModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="assetModalTitle">新增资产</h3>
+                <p style="color: #718096; font-size: 13px;">记录您的各类资产</p>
+            </div>
+            
+            <form id="assetForm">
+                <input type="hidden" id="assetEditId" value="">
+                
+                <!-- 资产子类型 -->
+                <div class="form-group">
+                    <label>资产类型 *</label>
+                    <select id="assetSubType" required onchange="onAssetSubTypeChange()">
+                        <option value="current">活期存款</option>
+                        <option value="fixed">定期存款</option>
+                        <option value="fund">基金</option>
+                        <option value="money_market">货币基金</option>
+                        <option value="yuebao">余额宝</option>
+                        <option value="lingqianbao">零钱宝</option>
+                        <option value="wealth_mgmt">理财产品</option>
+                        <option value="stock">股票</option>
+                        <option value="bond">债券</option>
+                        <option value="insurance">保险</option>
+                        <option value="gold">黄金</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                
+                <!-- 所属账户选择 -->
+                <div class="form-group">
+                    <label>所属账户 *</label>
+                    <select id="assetAccount" required onchange="updateAssetAccountType()">
+                        <option value="">-- 选择账户 --</option>
+                        <optgroup label="现有账户" id="existingAccountsGroup">
+                            <!-- 动态填充现有账户 -->
+                        </optgroup>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>资产名称 *</label>
+                    <input type="text" id="assetName" required placeholder="例如：定期存款、余额宝等">
+                </div>
+                
+                <!-- 扣款账户（投资类资产显示） -->
+                <div class="form-group" id="paymentSourceGroup" style="display: none;">
+                    <label>扣款账户 *</label>
+                    <select id="assetPaymentSource">
+                        <option value="">-- 选择扣款账户 --</option>
+                    </select>
+                    <p style="color: #718096; font-size: 12px; margin-top: 5px;">购买资金将从此账户扣除</p>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group" id="assetValueGroup">
+                        <label>当前价值 *</label>
+                        <input type="number" id="assetValue" step="0.01" required placeholder="0.00">
+                    </div>
+                    <div class="form-group" id="assetGoldGroup" style="display: none;">
+                        <label>持有克数 *</label>
+                        <input type="number" id="assetGoldGrams" step="0.01" placeholder="0.00">
+                    </div>
+                </div>
+                
+                <div class="form-row" id="goldPriceRow" style="display: none;">
+                    <div class="form-group">
+                        <label>当前金价 (元/克)</label>
+                        <input type="number" id="assetGoldPrice" step="0.01" value="1000" style="background: #fffbeb; color: #b45309; font-weight: 600;">
+                    </div>
+                    <div class="form-group">
+                        <label>预估价值</label>
+                        <input type="text" id="assetGoldTotalValue" readonly style="background: #f7fafc;" value="¥0.00">
+                    </div>
+                </div>
+
+                <div class="form-row" id="assetDetailFields">
+                    <div class="form-group">
+                        <label>利率/收益率 (%)</label>
+                        <input type="number" id="assetRate" step="0.01" placeholder="例如：3.5">
+                    </div>
+                    <div class="form-group">
+                        <label>到期日期</label>
+                        <input type="date" id="assetMaturityDate">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="assetRemark" placeholder="可选填">
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeAssetModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 黄金资产录入模态框 - 带联动扣款功能 -->
+    <div class="modal" id="goldModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="goldModalTitle" style="color: #975a16;"><i class="fas fa-coins"></i> 新增黄金资产</h3>
+                <p style="color: #718096; font-size: 13px;">按克数记录您的黄金持仓</p>
+            </div>
+            
+            <form id="goldForm">
+                <input type="hidden" id="goldEditId" value="">
+                
+                <!-- 联动扣款信息提示 -->
+                <div class="linkage-info" id="goldLinkageInfo" style="display: none;">
+                    <div class="linkage-info-icon"><i class="fas fa-lightbulb"></i></div>
+                    <div class="linkage-info-text">
+                        系统将自动从选中的支付账户扣除购买黄金的费用，无需手动修改银行卡余额
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>黄金名称 *</label>
+                    <input type="text" id="goldName" required placeholder="例如：金条、金饰、积存金等">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>持有克数 *</label>
+                        <input type="number" id="goldGrams" step="0.01" required placeholder="0.00" oninput="calculateGoldValue(); updateGoldDeductionPreview();">
+                    </div>
+                    <div class="form-group">
+                        <label>当前金价 (元/克)</label>
+                        <input type="number" id="goldPrice" step="0.01" value="1000" readonly style="background: #fefcbf; color: #975a16; font-weight: bold;">
+                    </div>
+                </div>
+                
+                <!-- 支付账户选择（仅新增时显示） -->
+                <div class="form-group" id="goldPaymentSourceGroup">
+                    <label>扣款账户 *</label>
+                    <select id="goldPaymentSource" class="payment-source-select" onchange="updateGoldDeductionPreview()">
+                        <option value="">-- 选择支付账户 --</option>
+                    </select>
+                    <small style="color: #718096; font-size: 12px;">购买黄金的费用将自动从此账户扣除</small>
+                </div>
+                
+                <!-- 所属账户选择（编辑时显示） -->
+                <div class="form-group" id="goldAccountGroup" style="display: none;">
+                    <label>所属账户</label>
+                    <select id="goldAccount" class="payment-source-select">
+                        <option value="">-- 选择所属账户 --</option>
+                    </select>
+                    <small style="color: #718096; font-size: 12px;">更改黄金资产所属的账户</small>
+                </div>
+                
+                <!-- 扣款预览 -->
+                <div class="deduction-preview" id="goldDeductionPreview" style="display: none;">
+                    将从 <span id="goldDeductionSource">--</span> 扣除 
+                    <span class="deduction-amount" id="goldDeductionAmount">¥0.00</span>
+                </div>
+                
+                <div class="form-group">
+                    <label>预估价值</label>
+                    <input type="text" id="goldValueDisplay" readonly style="background: #f0f4f8; font-weight: bold; color: #744210;">
+                </div>
+                
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="goldRemark" placeholder="可选填，如：购买日期、品牌等">
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeGoldModal()">取消</button>
+                    <button type="submit" class="btn btn-gold"><i class="fas fa-save"></i> 保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 创建账户模态框 -->
+    <div class="modal" id="accountModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="accountModalTitle"><i class="fas fa-university"></i> 创建账户</h3>
+                <p style="color: #718096; font-size: 13px;">创建银行卡、微信钱包、支付宝等账户</p>
+            </div>
+            
+            <form id="accountForm">
+                <input type="hidden" id="createAccountEditId" value="">
+                
+                <div class="form-group">
+                    <label>账户类型 *</label>
+                    <select id="createAccountType" required>
+                        <option value="bank">银行卡</option>
+                        <option value="wechat">微信钱包</option>
+                        <option value="alipay">支付宝</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>账户名称 *</label>
+                    <input type="text" id="createAccountName" required placeholder="例如：招商银行、微信零钱">
+                </div>
+                
+                <div class="form-group">
+                    <label>初始余额 *</label>
+                    <input type="number" id="createAccountBalance" step="0.01" required placeholder="0.00">
+                </div>
+                
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="createAccountRemark" placeholder="可选填">
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeAccountModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">创建账户</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 负债录入模态框 -->
+    <div class="modal" id="debtModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="debtModalTitle"><i class="fas fa-credit-card"></i> 新增负债</h3>
+                <p style="color: #718096; font-size: 13px;">记录您的各类负债（贷款、信用卡等）</p>
+            </div>
+            
+            <form id="debtForm">
+                <input type="hidden" id="debtEditId" value="">
+                
+                <div class="form-group">
+                    <label>负债名称 *</label>
+                    <input type="text" id="debtName" required placeholder="例如：招商银行房贷">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>负债类型 *</label>
+                        <select id="debtType" required>
+                            <option value="mortgage"><i class="fas fa-home"></i> 房贷</option>
+                            <option value="car_loan"><i class="fas fa-car"></i> 车贷</option>
+                            <option value="credit_card"><i class="fas fa-credit-card"></i> 信用卡</option>
+                            <option value="consumer_loan"><i class="fas fa-shopping-bag"></i> 消费贷</option>
+                            <option value="student_loan"><i class="fas fa-graduation-cap"></i> 助学贷款</option>
+                            <option value="personal_loan"><i class="fas fa-user"></i> 个人借款</option>
+                            <option value="other"><i class="fas fa-file-alt"></i> 其他负债</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>负债金额 *</label>
+                        <input type="number" id="debtAmount" step="0.01" required placeholder="0.00">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>年利率 (%)</label>
+                        <input type="number" id="debtRate" step="0.01" placeholder="例如：4.9">
+                    </div>
+                    <div class="form-group">
+                        <label>剩余期限（月）</label>
+                        <input type="number" id="debtTerm" placeholder="例如：120">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>每月还款额</label>
+                    <input type="number" id="debtMonthly" step="0.01" placeholder="0.00">
+                </div>
+                
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="debtRemark" placeholder="可选填，如：还款日每月15号">
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeDebtModal()">取消</button>
+                    <button type="submit" class="btn btn-warning"><i class="fas fa-save"></i> 保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 基金模态框 - 带联动扣款功能 -->
+    <div class="modal" id="fundModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle"><i class="fas fa-chart-line"></i> 新增基金</h3>
+                <p style="color: #718096; font-size: 13px;">填写基金详细信息</p>
+            </div>
+            
+            <form id="fundForm">
+                <input type="hidden" id="editIndex" value="-1">
+                
+                <!-- 联动扣款信息提示 -->
+                <div class="linkage-info" id="fundLinkageInfo" style="display: none;">
+                    <div class="linkage-info-icon"><i class="fas fa-lightbulb"></i></div>
+                    <div class="linkage-info-text">
+                        系统将自动从选中的支付账户扣除购买基金的费用，无需手动修改银行卡余额
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>基金名称 *</label>
+                    <input type="text" id="fundName" required placeholder="例如：易方达蓝筹精选">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>基金代码 *</label>
+                        <input type="text" id="fundCode" required placeholder="例如：005827">
+                    </div>
+                    <div class="form-group">
+                        <label>基金类型</label>
+                        <select id="fundTypeSelect">
+                            <option value="混合型">混合型</option>
+                            <option value="股票型">股票型</option>
+                            <option value="债券型">债券型</option>
+                            <option value="指数型">指数型</option>
+                            <option value="QDII">QDII</option>
+                            <option value="货币型">货币型</option>
+                            <option value="FOF">FOF</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="isFixed">
+                        <label for="isFixed" style="margin-bottom: 0;">定投基金</label>
+                    </div>
+                </div>
+                
+                <!-- 支付账户选择（仅新增时显示） -->
+                <div class="form-group" id="fundPaymentSourceGroup">
+                    <label>扣款账户 *</label>
+                    <select id="fundPaymentSource" class="payment-source-select" required onchange="updateFundDeductionPreview()">
+                        <option value="">-- 选择支付账户 --</option>
+                    </select>
+                    <small style="color: #718096; font-size: 12px;">购买基金的费用将自动从此账户扣除</small>
+                </div>
+                
+                <!-- 扣款预览 -->
+                <div class="deduction-preview" id="fundDeductionPreview" style="display: none;">
+                    将从 <span id="fundDeductionSource">--</span> 扣除 
+                    <span class="deduction-amount" id="fundDeductionAmount">¥0.00</span>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>成本净值</label>
+                        <input type="number" id="costNav" step="0.0001" placeholder="0.0000" oninput="calculateCost(); updateFundDeductionPreview();">
+                    </div>
+                    <div class="form-group">
+                        <label>持有份额</label>
+                        <input type="number" id="shares" step="0.01" placeholder="0.00" oninput="calculateCost(); updateFundDeductionPreview();">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>当前净值</label>
+                        <input type="number" id="currentNav" step="0.0001" placeholder="自动获取">
+                    </div>
+                    <div class="form-group">
+                        <label>卖出净值</label>
+                        <input type="number" id="sellNav" step="0.0001" placeholder="0.0000">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>卖出份额</label>
+                        <input type="number" id="sellShares" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>成本金额</label>
+                        <input type="number" id="costAmount" step="0.01" placeholder="自动计算" oninput="updateFundDeductionPreview();">
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 基金导入选择模态框 -->
+    <div class="modal" id="importModal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-file-import"></i> 导入基金数据</h3>
+                <p style="color: #718096; font-size: 13px;">请选择导入方式</p>
+            </div>
+            
+            <div class="import-options">
+                <div class="import-option-title">选择导入模式</div>
+                <div class="import-option-cards">
+                    <div class="import-option-card" id="optionAppend" onclick="selectImportMode('append')">
+                        <div class="icon"><i class="fas fa-plus-circle"></i></div>
+                        <div class="title">追加导入</div>
+                        <div class="desc">保留现有基金，将新数据添加到已有持仓中</div>
+                    </div>
+                    <div class="import-option-card" id="optionReplace" onclick="selectImportMode('replace')">
+                        <div class="icon"><i class="fas fa-sync-alt"></i></div>
+                        <div class="title">覆盖导入</div>
+                        <div class="desc">清空现有基金，完全使用新数据替换</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 导入时选择扣款账户 -->
+            <div class="form-group" id="importPaymentSourceGroup" style="margin-top: 20px;">
+                <label>扣款账户（导入时将从该账户扣除总成本）*</label>
+                <select id="importPaymentSource" class="payment-source-select" required>
+                    <option value="">-- 选择支付账户 --</option>
+                </select>
+                <small style="color: #718096; font-size: 12px;">导入基金的总成本将自动从此账户扣除</small>
+            </div>
+            
+            <div class="import-preview" id="importPreview" style="display: none;">
+                <div class="import-preview-title">数据预览（前5条）</div>
+                <table class="import-preview-table" id="previewTable">
+                    <thead>
+                        <tr>
+                            <th>名称</th>
+                            <th>代码</th>
+                            <th>类型</th>
+                            <th>份额</th>
+                            <th>成本金额</th>
+                        </tr>
+                    </thead>
+                    <tbody id="previewTableBody"></tbody>
+                </table>
+            </div>
+            
+            <div class="import-warning" id="importWarning" style="display: none;">
+                <div class="import-warning-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="import-warning-text">
+                    <strong>警告：</strong>您选择了<strong id="warningMode">覆盖</strong>模式，
+                    这将<strong id="warningAction">删除</strong>现有的 <strong id="existingCount">0</strong> 条基金记录，
+                    并导入 <strong id="newCount">0</strong> 条新记录。此操作不可恢复，请确认！
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeImportModal()">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmImportBtn" onclick="confirmImport()" disabled>
+                    <i class="fas fa-check"></i> 确认导入
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 编辑交易模态框 -->
+    <div class="modal" id="editTransactionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-edit"></i> 编辑交易记录</h3>
+                <p style="color: #718096; font-size: 13px;">修改交易记录的详细信息</p>
+            </div>
+            
+            <form id="editTransactionForm">
+                <input type="hidden" id="editTransactionId">
+                <div class="form-group">
+                    <label>金额 *</label>
+                    <input type="number" id="editAmount" step="0.01" placeholder="请输入金额" required>
+                </div>
+                <div class="form-group">
+                    <label>分类</label>
+                    <select id="editCategory">
+                        <option value="">请选择分类</option>
+                        <option value="工资">工资</option>
+                        <option value="奖金">奖金</option>
+                        <option value="投资收益">投资收益</option>
+                        <option value="兼职收入">兼职收入</option>
+                        <option value="日常消费">日常消费</option>
+                        <option value="餐饮娱乐">餐饮娱乐</option>
+                        <option value="交通出行">交通出行</option>
+                        <option value="医疗健康">医疗健康</option>
+                        <option value="教育学习">教育学习</option>
+                        <option value="其他">其他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="editDescription" placeholder="请输入交易描述"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>日期时间 *</label>
+                    <input type="datetime-local" id="editDatetime" required>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditTransactionModal()">取消</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> 保存修改
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 收入模态框 -->
+    <div class="modal" id="incomeModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-arrow-down"></i> 添加收入</h3>
+                <p style="color: #718096; font-size: 13px;">记录收入并添加到指定账户</p>
+            </div>
+            
+            <form id="incomeForm">
+                <div class="form-group">
+                    <label>金额 *</label>
+                    <input type="number" id="incomeAmount" step="0.01" placeholder="请输入金额" required>
+                </div>
+                <div class="form-group">
+                    <label>分类 *</label>
+                    <select id="incomeCategory" required>
+                        <option value="工资">工资</option>
+                        <option value="奖金">奖金</option>
+                        <option value="投资收益">投资收益</option>
+                        <option value="兼职收入">兼职收入</option>
+                        <option value="其他">其他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>账户 *</label>
+                    <select id="incomeAccount" required onchange="updateIncomeAssetSelect(this.value)">
+                        <option value="">-- 选择账户 --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>资产 *</label>
+                    <select id="incomeAsset" required>
+                        <option value="">-- 选择资产 --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <input type="text" id="incomeDescription" placeholder="请输入描述">
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeIncomeModal()">取消</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 支出模态框 -->
+    <div class="modal" id="expenseModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i class="fas fa-arrow-up"></i> 添加支出</h3>
+                <p style="color: #718096; font-size: 13px;">记录支出并从指定账户扣除</p>
+            </div>
+            
+            <form id="expenseForm">
+                <div class="form-group">
+                    <label>金额 *</label>
+                    <input type="number" id="expenseAmount" step="0.01" placeholder="请输入金额" required>
+                </div>
+                <div class="form-group">
+                    <label>分类 *</label>
+                    <select id="expenseCategory" required>
+                        <option value="餐饮">餐饮</option>
+                        <option value="交通">交通</option>
+                        <option value="购物">购物</option>
+                        <option value="娱乐">娱乐</option>
+                        <option value="医疗">医疗</option>
+                        <option value="教育">教育</option>
+                        <option value="其他">其他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>账户 *</label>
+                    <select id="expenseAccount" required onchange="updateExpenseAssetSelect(this.value)">
+                        <option value="">-- 选择账户 --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>资产 *</label>
+                    <select id="expenseAsset" required>
+                        <option value="">-- 选择资产 --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <input type="text" id="expenseDescription" placeholder="请输入描述">
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeExpenseModal()">取消</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> 保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="toast" id="toast"></div>
+    
+    <!-- 脚本文件 -->
+    <script src="js/utils.js"></script>
+    <script src="js/modules/dataManager.js"></script>
+    <script src="js/modules/asset.js"></script>
+    <script src="js/modules/debt.js"></script>
+    <script src="js/modules/gold.js"></script>
+    <script src="js/modules/fund.js"></script>
+    <script src="js/modules/transaction.js"></script>
+    <script src="js/script.js"></script>
+</body>
+</html>
