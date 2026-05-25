@@ -985,50 +985,97 @@ async function confirmImport() {
     return;
   }
 
-  // 处理联动扣款
-  const totalCost = pendingImportData.value.reduce((sum, item) => {
-    return sum + safeNumber(item['成本金额'] || item['金额'] || 0);
-  }, 0);
+  try {
+    // 处理联动扣款
+    const totalCost = pendingImportData.value.reduce((sum, item) => {
+      return sum + safeNumber(item['成本金额'] || item['金额'] || 0);
+    }, 0);
 
-  const sourceAsset = assets.value.find(a => a.id === importPaymentSource.value);
-  if (sourceAsset) {
-    if (safeNumber(sourceAsset.value) < totalCost) {
-      showToast('扣款账户余额不足', 'error');
-      return;
+    const sourceAsset = assets.value.find(a => a.id === importPaymentSource.value);
+    if (sourceAsset) {
+      if (safeNumber(sourceAsset.value) < totalCost) {
+        showToast('扣款账户余额不足', 'error');
+        return;
+      }
+      // 扣除账户余额
+      sourceAsset.value = safeNumber(sourceAsset.value) - totalCost;
+      await saveAssetFromService(sourceAsset, true);
+      console.log('账户扣款成功:', totalCost);
     }
-    // 扣除账户余额
-    sourceAsset.value = safeNumber(sourceAsset.value) - totalCost;
-    await saveAssetFromService(sourceAsset);
-  }
 
-  // 导入数据
-  if (selectedImportMode.value === 'replace') {
-    // 清空现有基金
-    for (const fund of funds.value) {
-      await deleteFundFromService(fund.id);
+    // 导入数据
+    if (selectedImportMode.value === 'replace') {
+      // 清空现有基金 - 使用 Promise.all 等待所有删除完成
+      console.log('覆盖模式：开始删除现有基金，共', funds.value.length, '条');
+      
+      if (funds.value.length > 0) {
+        const deletePromises = funds.value.map(async (fund) => {
+          console.log('正在删除基金:', fund.id, fund.name);
+          const result = await deleteFundFromService(fund.id);
+          console.log('删除基金结果:', fund.id, result);
+          return result;
+        });
+        
+        try {
+          await Promise.all(deletePromises);
+          console.log('覆盖模式：现有基金删除完成');
+          // 等待一小段时间确保数据库操作完成
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (deleteError) {
+          console.error('删除基金失败:', deleteError);
+          throw new Error('删除现有基金失败: ' + deleteError.message);
+        }
+      } else {
+        console.log('没有现有基金需要删除');
+      }
+      
+      // 立即清空前端数据
+      funds.value = [];
+      originalFunds.value = [];
     }
-  }
 
-  for (const item of pendingImportData.value) {
-    const fund = {
-      id: generateId(),
-      name: item['名称'] || '',
-      code: item['基金号'] || item['代码'] || '',
-      type: item['基金类型'] || '混合型',
-      isFixed: false,
-      costNav: safeNumber(item['成本净值'] || 0),
-      shares: safeNumber(item['持有份额'] || item['份额'] || 0),
-      costAmount: safeNumber(item['成本金额'] || item['金额'] || 0),
-      currentNav: safeNumber(item['当前净值'] || 0),
-      sellNav: safeNumber(item['卖出净值'] || 0),
-      sellShares: safeNumber(item['卖出份额'] || 0)
-    };
-    await saveFundFromService(fund, false);
-  }
+    // 导入新数据
+    console.log('开始导入新数据，共', pendingImportData.value.length, '条');
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const item of pendingImportData.value) {
+      try {
+        const fund = {
+          id: generateId(),
+          name: item['名称'] || '',
+          code: item['基金号'] || item['代码'] || '',
+          type: item['基金类型'] || '混合型',
+          isFixed: false,
+          costNav: safeNumber(item['成本净值'] || 0),
+          shares: safeNumber(item['持有份额'] || item['份额'] || 0),
+          costAmount: safeNumber(item['成本金额'] || item['金额'] || 0),
+          currentNav: safeNumber(item['当前净值'] || 0),
+          sellNav: safeNumber(item['卖出净值'] || 0),
+          sellShares: safeNumber(item['卖出份额'] || 0)
+        };
+        await saveFundFromService(fund, false);
+        console.log('基金保存成功:', fund.name);
+        successCount++;
+      } catch (saveError) {
+        console.error('基金保存失败:', item['名称'], saveError);
+        failCount++;
+      }
+    }
+    console.log(`新数据导入完成: 成功 ${successCount} 条, 失败 ${failCount} 条`);
 
-  await loadData();
-  closeImportModal();
-  showToast(`成功导入 ${pendingImportData.value.length} 条基金记录`);
+    await loadData();
+    closeImportModal();
+    
+    if (failCount > 0) {
+      showToast(`导入完成: 成功 ${successCount} 条, 失败 ${failCount} 条`, 'error');
+    } else {
+      showToast(`成功导入 ${successCount} 条基金记录`);
+    }
+  } catch (error) {
+    console.error('导入失败:', error);
+    showToast('导入失败: ' + (error.message || '未知错误'), 'error');
+  }
 }
 
 function exportExcel() {
@@ -1076,7 +1123,8 @@ async function fetchFundNav(fundCode) {
           fund.currentNav = nav;
           fund.name = fundData.name || fund.name;
           fund.updateDate = fundData.date;
-          saveFundFromService(fund);
+          fund.updatedAt = new Date().toISOString();
+          await saveFundFromService(fund, true);
           
           // 显示更新通知
           showToast(`已更新 ${fundCode} 净值: ${nav} (${fundData.date})`);

@@ -3,8 +3,11 @@ const API_BASE_URL = '/api';
 
 // 通用API请求函数
 async function fetchApi(endpoint, options = {}) {
+  const url = `${API_BASE_URL}${endpoint}`;
+  console.log(`API请求: ${options.method || 'GET'} ${url}`);
+  
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -12,17 +15,27 @@ async function fetchApi(endpoint, options = {}) {
       }
     });
     
+    console.log(`API响应: ${response.status} ${response.statusText}`);
+    
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('API错误响应:', errorText);
       throw new Error(`API请求失败: ${response.status} - ${errorText}`);
     }
     
     // 检查响应是否为空
     const contentType = response.headers.get('content-type');
+    console.log('响应Content-Type:', contentType);
+    
     if (contentType && contentType.includes('application/json')) {
-      return await response.json();
+      const data = await response.json();
+      console.log('API返回数据:', data);
+      return data;
     }
-    return await response.text();
+    
+    const text = await response.text();
+    console.log('API返回文本:', text);
+    return text;
   } catch (error) {
     console.error('API请求错误:', error);
     throw error;
@@ -40,9 +53,12 @@ export async function getAllAccounts() {
   return await fetchApi('/accounts');
 }
 
-export async function saveAccount(account) {
-  // 检查是否是新账户（通过检查id是否以'id_'开头）
-  if (account.id && !account.id.startsWith('id_')) {
+export async function saveAccount(account, isUpdate = false) {
+  // 通过isUpdate参数或检查id格式来判断是创建还是更新
+  // 如果id不以'id_'开头，说明是数据库已有记录，使用更新
+  const shouldUpdate = isUpdate || (account.id && !account.id.startsWith('id_'));
+
+  if (shouldUpdate) {
     // 更新现有账户
     return await fetchApi(`/accounts/${account.id}`, {
       method: 'PUT',

@@ -550,12 +550,12 @@ app.put('/api/funds/:id', async (req, res) => {
         const updateCurrentNav = currentNav !== undefined ? currentNav : current.current_nav;
         const updateSellNav = sellNav !== undefined ? sellNav : current.sell_nav;
         const updateSellShares = sellShares !== undefined ? sellShares : current.sell_shares;
-        const updateDate = updateDate !== undefined ? updateDate : current.update_date;
+        const finalUpdateDate = updateDate !== undefined ? updateDate : current.update_date;
         const updateRemark = remark !== undefined ? remark : current.remark;
         
         const result = await pool.query(
             'UPDATE funds SET name = $1, code = $2, type = $3, is_fixed = $4, cost_nav = $5, shares = $6, cost_amount = $7, current_nav = $8, sell_nav = $9, sell_shares = $10, update_date = $11, remark = $12, updated_at = CURRENT_TIMESTAMP WHERE id = $13 RETURNING *',
-            [updateName, updateCode, updateType, updateIsFixed, updateCostNav, updateShares, updateCostAmount, updateCurrentNav, updateSellNav, updateSellShares, updateDate, updateRemark, id]
+            [updateName, updateCode, updateType, updateIsFixed, updateCostNav, updateShares, updateCostAmount, updateCurrentNav, updateSellNav, updateSellShares, finalUpdateDate, updateRemark, id]
         );
         
         res.json(snakeToCamel(result.rows[0]));

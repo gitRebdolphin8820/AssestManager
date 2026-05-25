@@ -233,6 +233,12 @@
             </div>
             <div class="account-total">{{ formatCurrency(account.totalValue) }}</div>
           </div>
+          <div class="account-progress-bar">
+            <div class="account-progress-fill" :style="{ width: account.percent + '%' }"></div>
+          </div>
+          <div style="font-size: 12px; color: #a0aec0; padding: 5px 20px; text-align: right;">
+            占比 {{ account.percent }}%
+          </div>
           <div class="account-body">
             <!-- 按子类型分组显示资产 -->
             <div 
@@ -968,21 +974,25 @@ const accountGroups = computed(() => {
   });
   
   // 计算每个账户的总价值
+  let totalAllAssets = 0;
   accountMap.forEach(account => {
-    // 先从账户本身获取余额
-    const accountBalance = accounts.value.find(a => a.id === account.id)?.balance || 0;
-    
-    // 再加上资产价值
-    const assetsValue = account.assets.reduce((sum, a) => sum + parseFloat(a.value || 0), 0) + parseFloat(accountBalance || 0);
+    // 只计算资产价值（assets表中已包含账户余额信息，不需要重复加account.balance）
+    const assetsValue = account.assets.reduce((sum, a) => sum + parseFloat(a.value || 0), 0);
     const goldValue = account.goldAssets.reduce((sum, g) => sum + (g.grams * currentGoldPrice.value), 0);
-    
+
     account.assetsValue = assetsValue;
     account.goldValue = goldValue;
     account.totalValue = assetsValue + goldValue;
-    
+    totalAllAssets += account.totalValue;
+
     groups.push(account);
   });
-  
+
+  // 计算每个账户的占比
+  groups.forEach(account => {
+    account.percent = totalAllAssets > 0 ? (account.totalValue / totalAllAssets * 100).toFixed(1) : 0;
+  });
+
   return groups;
 });
 
@@ -1093,6 +1103,17 @@ function renderAssetChart() {
         title: {
           display: true,
           text: '资产分布'
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.label || '';
+              const value = context.parsed || 0;
+              const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
+              const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+              return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+            }
+          }
         }
       }
     }
@@ -1180,6 +1201,17 @@ function renderDebtChart() {
         title: {
           display: true,
           text: '负债分布'
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.label || '';
+              const value = context.parsed || 0;
+              const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
+              const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+              return `${label}: ${formatCurrency(value)} (${percentage}%)`;
+            }
+          }
         }
       }
     }
