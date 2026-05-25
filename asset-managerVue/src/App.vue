@@ -34,6 +34,9 @@
     <TransactionPage v-if="currentTab === 'transaction'" class="page-content active" />
     <AssetPage v-else-if="currentTab === 'asset'" class="page-content active" />
     <FundPage v-else-if="currentTab === 'fund'" class="page-content active" />
+
+    <!-- AI 财务助手 -->
+    <ChatWidget />
   </div>
 </template>
 
@@ -42,6 +45,7 @@ import { ref, onMounted } from 'vue';
 import TransactionPage from './components/TransactionPage.vue';
 import AssetPage from './components/AssetPage.vue';
 import FundPage from './components/FundPage.vue';
+import ChatWidget from './components/ChatWidget.vue';
 import { initData } from './services/dataService';
 
 const currentTab = ref('transaction');

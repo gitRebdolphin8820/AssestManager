@@ -6,6 +6,13 @@ const cors = require('cors');
 const axios = require('axios');
 const cheerio = require('cheerio');
 
+// 加载环境变量（如果存在 .env 文件）
+try {
+    require('dotenv').config();
+} catch (e) {
+    console.log('未安装 dotenv，使用系统环境变量');
+}
+
 // 创建Express应用
 const app = express();
 
@@ -757,6 +764,225 @@ app.get('/api/fund/nav', async (req, res) => {
     } catch (err) {
         console.error('获取基金净值错误:', err);
         res.status(500).json({ status: 'error', error: err.message });
+    }
+});
+
+// ============================================
+// AI 聊天接口（简单实现版本）
+// ============================================
+
+// DeepSeek API 配置（预留，需要用户填写自己的 API Key）
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
+const DEEPSEEK_API_URL = 'https://api.moonshot.cn/v1';
+
+// 模拟 AI 回复（当没有配置 API Key 时使用）
+function getMockAIResponse(message, financialData) {
+    const lowerMsg = message.toLowerCase();
+
+    // 简单的关键词匹配
+    if (lowerMsg.includes('财务状况') || lowerMsg.includes('分析')) {
+        return `根据您的财务数据：\n\n` +
+               `📊 总资产：${financialData.totalAssets} 元\n` +
+               `💳 总负债：${financialData.totalDebts} 元\n` +
+               `💎 净资产：${financialData.netWorth} 元\n` +
+               `📈 资产负债率：${financialData.debtRatio}%\n\n` +
+               `您的财务状况${financialData.debtRatio > 50 ? '需要关注，建议降低负债' : '较为健康'}。`;
+    }
+
+    if (lowerMsg.includes('资产配置') || lowerMsg.includes('合理')) {
+        return `您的资产配置情况：\n\n` +
+               `🏦 银行存款：${financialData.bankAssets} 元 (${financialData.bankPercent}%)\n` +
+               `📈 基金投资：${financialData.fundAssets} 元 (${financialData.fundPercent}%)\n` +
+               `🪙 黄金资产：${financialData.goldAssets} 元 (${financialData.goldPercent}%)\n\n` +
+               `${financialData.fundPercent < 30 ? '建议适当增加基金投资比例，提高收益潜力。' : '基金配置比例适中。'}`;
+    }
+
+    if (lowerMsg.includes('建议') || lowerMsg.includes('理财')) {
+        return `💡 理财建议：\n\n` +
+               `1. 建立应急基金：保留 3-6 个月生活费在活期存款中\n` +
+               `2. 分散投资：不要把所有资金放在单一资产类型\n` +
+               `3. 定期复盘：每月检查一次资产配置情况\n` +
+               `4. 控制负债：资产负债率建议控制在 50% 以下\n\n` +
+               `需要更详细的建议，请告诉我您的具体目标（如购房、养老等）。`;
+    }
+
+    if (lowerMsg.includes('负债率') || lowerMsg.includes('负债')) {
+        const ratio = financialData.debtRatio;
+        let evaluation = '';
+        if (ratio < 30) evaluation = '负债率较低，财务风险小。';
+        else if (ratio < 50) evaluation = '负债率适中，注意控制。';
+        else if (ratio < 70) evaluation = '负债率偏高，建议优先还债。';
+        else evaluation = '负债率过高，需要立即调整！';
+
+        return `您的资产负债率为 ${ratio}%。\n\n${evaluation}`;
+    }
+
+    // 默认回复
+    return `您好！我是您的 AI 财务助手。\n\n` +
+           `您可以问我：\n` +
+           `• 分析我的财务状况\n` +
+           `• 我的资产配置合理吗？\n` +
+           `• 有什么理财建议？\n` +
+           `• 我的负债率高吗？\n\n` +
+           `当前财务概览：总资产 ${financialData.totalAssets} 元，净资产 ${financialData.netWorth} 元。`;
+}
+
+// 获取财务数据
+async function getFinancialData() {
+    const client = await pool.connect();
+    try {
+        // 1. assets 表中的资产（银行存款、定期存款等，不包括基金和黄金）
+        const assetsResult = await client.query(
+            "SELECT SUM(value) as total FROM assets WHERE sub_type NOT IN ('fund', 'money_market', 'yuebao', 'lingqianbao', 'gold')"
+        );
+
+        // 2. assets 表中的基金类资产
+        const assetsFundResult = await client.query(
+            "SELECT SUM(value) as total FROM assets WHERE sub_type IN ('fund', 'money_market', 'yuebao', 'lingqianbao')"
+        );
+
+        // 3. gold_assets 表中的黄金
+        const goldResult = await client.query('SELECT SUM(grams) as total_grams FROM gold_assets');
+
+        // 4. debts 表中的负债
+        const debtsResult = await client.query('SELECT SUM(amount) as total FROM debts');
+
+        // 5. funds 表中的基金市值 = 当前净值 * 持有份额
+        const fundsResult = await client.query(
+            'SELECT SUM(current_nav * (shares - sell_shares)) as total FROM funds WHERE current_nav > 0 AND shares > 0'
+        );
+
+        // 计算各类资产
+        const baseAssets = parseFloat(assetsResult.rows[0].total || 0);
+        const assetsFund = parseFloat(assetsFundResult.rows[0].total || 0);
+        const goldGrams = parseFloat(goldResult.rows[0].total_grams || 0);
+        const totalDebts = parseFloat(debtsResult.rows[0].total || 0);
+        const fundsMarketValue = parseFloat(fundsResult.rows[0].total || 0);
+
+        // 假设金价 1000 元/克计算黄金价值
+        const goldPrice = 1000;
+        const goldAssets = goldGrams * goldPrice;
+
+        // 基金总资产 = assets 表中的基金 + funds 表中的基金
+        const fundAssets = assetsFund + fundsMarketValue;
+
+        // 银行存款（活期存款类型的资产）
+        const bankResult = await client.query(
+            "SELECT SUM(value) as total FROM assets WHERE sub_type IN ('current', 'fixed')"
+        );
+        const bankAssets = parseFloat(bankResult.rows[0].total || 0);
+
+        // 总资产 = 基础资产 + 基金 + 黄金
+        const totalWealth = baseAssets + fundAssets + goldAssets;
+        const netWorth = totalWealth - totalDebts;
+        const debtRatio = totalWealth > 0 ? ((totalDebts / totalWealth) * 100).toFixed(1) : 0;
+
+        return {
+            totalAssets: totalWealth.toFixed(2),
+            totalDebts: totalDebts.toFixed(2),
+            netWorth: netWorth.toFixed(2),
+            debtRatio: debtRatio,
+            bankAssets: bankAssets.toFixed(2),
+            fundAssets: fundAssets.toFixed(2),
+            goldAssets: goldAssets.toFixed(2),
+            bankPercent: totalWealth > 0 ? ((bankAssets / totalWealth) * 100).toFixed(1) : 0,
+            fundPercent: totalWealth > 0 ? ((fundAssets / totalWealth) * 100).toFixed(1) : 0,
+            goldPercent: totalWealth > 0 ? ((goldAssets / totalWealth) * 100).toFixed(1) : 0
+        };
+    } catch (error) {
+        console.error('获取财务数据失败:', error);
+        // 返回默认值，避免接口报错
+        return {
+            totalAssets: '0.00',
+            totalDebts: '0.00',
+            netWorth: '0.00',
+            debtRatio: '0',
+            bankAssets: '0.00',
+            fundAssets: '0.00',
+            goldAssets: '0.00',
+            bankPercent: '0',
+            fundPercent: '0',
+            goldPercent: '0'
+        };
+    } finally {
+        client.release();
+    }
+}
+
+// 调用真实 AI API（DeepSeek）
+async function callDeepSeekAPI(message, history, financialData) {
+    // 构建系统提示词，包含用户的财务数据
+    const systemPrompt = `你是专业的财务顾问，请根据用户的财务数据提供分析和建议。
+
+用户当前财务状况：
+- 总资产：${financialData.totalAssets} 元
+- 总负债：${financialData.totalDebts} 元
+- 净资产：${financialData.netWorth} 元
+- 资产负债率：${financialData.debtRatio}%
+- 银行存款：${financialData.bankAssets} 元（占比 ${financialData.bankPercent}%）
+- 基金投资：${financialData.fundAssets} 元（占比 ${financialData.fundPercent}%）
+- 黄金资产：${financialData.goldAssets} 元（占比 ${financialData.goldPercent}%）
+
+请提供专业、实用的财务分析和建议，回答要简洁明了。`;
+
+    // 构建消息历史
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.map(h => ({ role: h.role, content: h.content })),
+        { role: 'user', content: message }
+    ];
+
+    // 调用 DeepSeek API
+    const response = await axios.post(DEEPSEEK_API_URL, {
+        model: 'deepseek-chat',
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 1000
+    }, {
+        headers: {
+            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        timeout: 30000 // 30秒超时
+    });
+
+    return response.data.choices[0].message.content;
+}
+
+// AI 聊天接口
+app.post('/api/chat', async (req, res) => {
+    try {
+        const { message, history = [] } = req.body;
+
+        if (!message) {
+            return res.status(400).json({ error: '消息不能为空' });
+        }
+
+        // 获取财务数据
+        const financialData = await getFinancialData();
+
+        let reply;
+
+        // 如果有配置 API Key，调用真实 AI；否则使用模拟回复
+        if (DEEPSEEK_API_KEY && DEEPSEEK_API_KEY.length > 10) {
+            try {
+                reply = await callDeepSeekAPI(message, history, financialData);
+                console.log('AI API 调用成功');
+            } catch (apiError) {
+                console.error('AI API 调用失败:', apiError.message);
+                // API 调用失败时降级到模拟回复
+                reply = getMockAIResponse(message, financialData);
+                reply += '\n\n（注：AI 服务暂时不可用，已切换至本地模式）';
+            }
+        } else {
+            // 没有配置 API Key，使用模拟回复
+            reply = getMockAIResponse(message, financialData);
+        }
+
+        res.json({ reply });
+    } catch (error) {
+        console.error('Chat API error:', error);
+        res.status(500).json({ error: '服务器内部错误' });
     }
 });
 
