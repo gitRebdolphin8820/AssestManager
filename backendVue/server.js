@@ -771,9 +771,9 @@ app.get('/api/fund/nav', async (req, res) => {
 // AI 聊天接口（简单实现版本）
 // ============================================
 
-// DeepSeek API 配置（预留，需要用户填写自己的 API Key）
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
-const DEEPSEEK_API_URL = 'https://api.moonshot.cn/v1';
+// Moonshot (Kimi) API 配置
+const MOONSHOT_API_KEY = process.env.MOONSHOT_API_KEY || '';
+const MOONSHOT_BASE_URL = 'https://api.moonshot.cn/v1';
 
 // 模拟 AI 回复（当没有配置 API Key 时使用）
 function getMockAIResponse(message, financialData) {
@@ -909,8 +909,8 @@ async function getFinancialData() {
     }
 }
 
-// 调用真实 AI API（DeepSeek）
-async function callDeepSeekAPI(message, history, financialData) {
+// 调用真实 AI API（Moonshot/Kimi）
+async function callMoonshotAPI(message, history, financialData) {
     // 构建系统提示词，包含用户的财务数据
     const systemPrompt = `你是专业的财务顾问，请根据用户的财务数据提供分析和建议。
 
@@ -932,21 +932,27 @@ async function callDeepSeekAPI(message, history, financialData) {
         { role: 'user', content: message }
     ];
 
-    // 调用 DeepSeek API
-    const response = await axios.post(DEEPSEEK_API_URL, {
-        model: 'deepseek-chat',
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 1000
-    }, {
-        headers: {
-            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-            'Content-Type': 'application/json'
-        },
-        timeout: 30000 // 30秒超时
-    });
+    console.log('调用 Moonshot API，消息数:', messages.length);
 
-    return response.data.choices[0].message.content;
+    try {
+        // 调用 Moonshot API
+        const response = await axios.post(`${MOONSHOT_BASE_URL}/chat/completions`, {
+            model: 'kimi-k2.5',
+            messages: messages
+        }, {
+            headers: {
+                'Authorization': `Bearer ${MOONSHOT_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 30000
+        });
+
+        console.log('Moonshot API 响应:', response.data);
+        return response.data.choices[0].message.content;
+    } catch (error) {
+        console.error('Moonshot API 错误详情:', error.response?.data || error.message);
+        throw error;
+    }
 }
 
 // AI 聊天接口
@@ -964,12 +970,12 @@ app.post('/api/chat', async (req, res) => {
         let reply;
 
         // 如果有配置 API Key，调用真实 AI；否则使用模拟回复
-        if (DEEPSEEK_API_KEY && DEEPSEEK_API_KEY.length > 10) {
+        if (MOONSHOT_API_KEY && MOONSHOT_API_KEY.length > 10) {
             try {
-                reply = await callDeepSeekAPI(message, history, financialData);
-                console.log('AI API 调用成功');
+                reply = await callMoonshotAPI(message, history, financialData);
+                console.log('Moonshot AI 调用成功');
             } catch (apiError) {
-                console.error('AI API 调用失败:', apiError.message);
+                console.error('Moonshot AI 调用失败:', apiError.message);
                 // API 调用失败时降级到模拟回复
                 reply = getMockAIResponse(message, financialData);
                 reply += '\n\n（注：AI 服务暂时不可用，已切换至本地模式）';
