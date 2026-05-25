@@ -944,7 +944,7 @@ async function callMoonshotAPI(message, history, financialData) {
                 'Authorization': `Bearer ${MOONSHOT_API_KEY}`,
                 'Content-Type': 'application/json'
             },
-            timeout: 30000
+            timeout: 300000
         });
 
         console.log('Moonshot API 响应:', response.data);
